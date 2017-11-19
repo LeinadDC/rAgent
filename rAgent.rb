@@ -6,9 +6,10 @@ require 'sys/filesystem'
 conn = PG::Connection.new("dbname=climate port=5432 host=192.168.98.129 user=postgres password=psql123" )
 
 def fillDatabase(conn)
+  puts "Iniciando inserción de datos"
+  logRegistry(conn,"Inserción de datos",DateTime.now)
   url = 'http://api.openweathermap.org/data/2.5/weather?q=Heredia,cr&appid=a6625d60bbdd040cdb8daebce9f39ce0'
   response = HTTParty.get(url)
-  #Ya que los datos no pesan mucho hacemos insert 300 veces por cada request para así lograr inflar la base de datos.
   i = 0
   while i < 300 do
     conn.exec("INSERT INTO weather (data) values ('#{response}')")
@@ -16,48 +17,57 @@ def fillDatabase(conn)
   end
 end
 
-def getPartitionSpace
+def logRegistry(conn, actionTaken, actionDate)
+  conn.exec("INSERT INTO log (actionTaken, actionDate) values ('#{actionTaken}','#{actionDate}')")
+end
+
+def getPartitionSpace(conn)
+  puts "Obteniendo actual del disco"
+  logRegistry(conn,"Revisando espacio en disco",DateTime.now)
   spaceMb_i = `df -m /dev/sda1`.split(/\b/)[24].to_i
-  puts spaceMb_i
+  puts "El espacio actual del disco es: " + spaceMb_i.to_s
+  spaceMb_i
 end
 
 def getDatabaseSize(conn)
+  puts "Obteniendo espacio actual de la base de datos"
   databaseSizeQuery = conn.exec("SELECT pg_size_pretty(pg_database_size('climate'));")
   databaseSize= databaseSizeQuery.getvalue(0, 0)
   #Se pasa este dato a Integer y se le extraen los valores que no sean numericos
   numberSize = Integer(databaseSize.gsub(/[^0-9]/, ''))
-  puts numberSize
+  puts "El espacio actual de la base es: " + numberSize.to_s
   numberSize
 end
 
-def clearDBSpace
-  #Si la base de datos está por encima de la capacidad indicada entonces se ejecuta el COPY
-  #Se debe cambiar el nombre de cada copia para así envitar que le caiga encima a la existente
-  #conn.exec("COPY weather to '/hdd/rubycopy.csv with csv'")
-  #Ejecuta COPY y espera a que termine de generar el CSV
-  #LIMPIA LA TABLA PARA NO TENER DATOS Y SEGUIR INSERTANDO
-  puts "Es necesario limpiar la base de datos - Iniciando proceso"
+def createCSVCopy(conn)
+  puts "Empezando proceso de copia de tabla"
+  logRegistry(conn,"Creando copia de tabla - CSV",DateTime.now)
+  conn.exec("COPY weather to '/hdd/rubycopy.csv with csv'")
+  puts "Tabla copiada"
+  logRegistry(conn,"Copia finalizada - CSV",DateTime.now)
 end
 
-#Hilo que se encarga de insertar datos en la base de datos.
-queryThread = Thread.new do
-  while true do
-    #Request al API del clima, obteniendo los datos de Heredia.
-    fillDatabase(conn)
-    #Se obtiene el tamaño de la base de datos que se está utilizando.
-    numberSize = getDatabaseSize(conn)
-    #Se obtiene el tamaño de la partición actual en la que se encuentra la base de datos
-    getPartitionSpace
+def truncateTable(conn)
+  puts "Limpiando tabla"
+  logRegistry(conn,"Iniciando TRUNCATE de tabla",DateTime.now)
+  conn.exec("TRUNCATE TABLE weather")
+  logRegistry(conn,"TRUNCATE finalizado",DateTime.now)
+end
 
+def clearDBSpace(conn)
+  logRegistry(conn,"Iniciando proceso de limpiezad de tabla",DateTime.now)
+  createCSVCopy(conn)
+  truncateTable(conn)
+  puts "Tabla limpiada - reanudando proceso de inserción de datos"
+end
+
+  while true do
+    fillDatabase(conn)
+    #Se obtiene el tamaño de la partición actual en la que se encuentra la base de datos
+    numberSize = getPartitionSpace(conn)
     #Se revisa si el tamaño actual de la partición es optimo para seguir recibiendo datos
     if numberSize < 3000
-      clearDBSpace
+      clearDBSpace(conn)
     end
-
-    timeElapsed = Time.now
-    puts timeElapsed
-    sleep 1
+    false
   end
-end
-
-queryThread.join
