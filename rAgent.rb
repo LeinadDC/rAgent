@@ -69,5 +69,4 @@ end
     if numberSize < 3000
       clearDBSpace(conn)
     end
-    false
   end
