@@ -43,11 +43,15 @@ ruby rAgent.rb
 
 ## Estructura
 
-Descripción estructura
+La solución está compuesta por un solo script que se encarga de toda la ejecución del agente.
 
 ## Funcionamiento
 
-Descripción funcionamiento
+Existe un método llamado fillDatabase que se encarga de hacer el request al API, sin embargo el JSON que devuelve tiene un peso sumamente pequeño, por razones educativas y para poder llenar la base de datos, cada request se repite 300 veces para así poder llenar la base de datos y probar correctamente el script.
+
+Existe otro método llamado getPartitionSpace que se encarga de devolver el espacio actual en el disco en el cual se ejecuta el script, y otro método similar que devuelve el espacio de la base de datos que se está usando.
+
+Para el manejo del espacio existen otros 2 métodos llamados createCSVCopy y truncateTable que se ejecutan en ese mismo orden. El primero crea una copia actual de la tabla en formato CSV mientras que el segundo limpia la tabla de datos después de que se crea la copia.
 
 
 ## Autor
